@@ -1,0 +1,1530 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🌍 UNESCO World Heritage Explorer</title>
+
+  <!-- 카카오맵 SDK -->
+  <script type="text/javascript"
+    src="//dapi.kakao.com/v2/maps/sdk.js?appkey=77c964d00ed706ac6c29b94de95490de&libraries=services">
+  </script>
+
+  <!-- 구글 폰트: 고급스러운 조합 -->
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Noto+Sans+KR:wght@300;400;500;700&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet"/>
+
+  <style>
+    /* ================================================================
+       CSS 변수 — 유네스코 세계/하늘/지구 테마
+    ================================================================ */
+    :root {
+      --deep-ocean:    #03091a;
+      --ocean-mid:     #061d3f;
+      --ocean-light:   #0a3060;
+      --sky-blue:      #1565c0;
+      --horizon:       #1e88e5;
+      --azure:         #42a5f5;
+      --gold:          #f9a825;
+      --gold-light:    #ffd54f;
+      --gold-dim:      rgba(249,168,37,0.18);
+      --culture-color: #e67e22;
+      --culture-dark:  #a04000;
+      --nature-color:  #27ae60;
+      --nature-dark:   #145a32;
+      --white:         #f0f6ff;
+      --white-dim:     rgba(240,246,255,0.08);
+      --panel:         rgba(6,29,63,0.88);
+      --panel-border:  rgba(66,165,245,0.22);
+      --glow-blue:     rgba(30,136,229,0.35);
+      --glow-gold:     rgba(249,168,37,0.3);
+      --text-primary:  #e8f4fd;
+      --text-mid:      #90caf9;
+      --text-dim:      #546e7a;
+      --radius-lg:     20px;
+      --shadow:        0 16px 48px rgba(0,0,0,0.5);
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      height: 100vh; overflow: hidden;
+      background: var(--deep-ocean);
+      color: var(--text-primary);
+      position: relative;
+    }
+
+    /* ================================================================
+       배경: 별이 빛나는 우주/지구 느낌
+    ================================================================ */
+    #bgCanvas {
+      position: fixed; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse at 20% 20%, rgba(21,101,192,0.3) 0%, transparent 55%),
+        radial-gradient(ellipse at 80% 80%, rgba(39,174,96,0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(6,29,63,0.9) 0%, transparent 100%),
+        linear-gradient(160deg, #03091a 0%, #061d3f 40%, #03091a 100%);
+    }
+
+    /* 별 반짝임 */
+    .star {
+      position: fixed; border-radius: 50%;
+      background: white; pointer-events: none; z-index: 1;
+      animation: starBlink ease infinite;
+    }
+    @keyframes starBlink {
+      0%,100% { opacity: 0.15; transform: scale(1); }
+      50%      { opacity: 0.9;  transform: scale(1.4); }
+    }
+
+    /* 위도선/경도선 패턴 (지구 느낌) */
+    #gridLines {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden;
+    }
+    .grid-circle {
+      position: absolute; border-radius: 50%;
+      border: 1px solid rgba(66,165,245,0.06);
+      transform: translate(-50%, -50%);
+      left: 50%; top: 50%;
+      animation: gridPulse 8s ease infinite;
+    }
+    @keyframes gridPulse {
+      0%,100% { opacity: 0.4; }
+      50%      { opacity: 0.08; }
+    }
+
+    /* ================================================================
+       앱 레이아웃
+    ================================================================ */
+    #app { position: relative; z-index: 10; display: flex; height: 100vh; }
+
+    /* ================================================================
+       사이드바
+    ================================================================ */
+    #sidebar {
+      width: 400px; min-width: 340px; height: 100vh;
+      display: flex; flex-direction: column;
+      background: var(--panel);
+      backdrop-filter: blur(24px) saturate(1.4);
+      -webkit-backdrop-filter: blur(24px) saturate(1.4);
+      border-right: 1px solid var(--panel-border);
+      box-shadow: 6px 0 40px rgba(0,0,0,0.4);
+      overflow: hidden;
+      position: relative;
+    }
+    /* 사이드바 좌측 빛 줄기 */
+    #sidebar::before {
+      content: '';
+      position: absolute; top: 0; left: 0; bottom: 0; width: 3px;
+      background: linear-gradient(180deg,
+        transparent 0%, var(--azure) 30%, var(--gold) 60%, transparent 100%);
+      opacity: 0.6;
+    }
+
+    /* ── 헤더 ── */
+    .app-header {
+      padding: 22px 22px 16px; flex-shrink: 0;
+      position: relative; overflow: hidden;
+      background: linear-gradient(135deg,
+        rgba(3,9,26,0.95) 0%, rgba(6,29,63,0.95) 100%);
+      border-bottom: 1px solid rgba(66,165,245,0.15);
+    }
+
+    /* 헤더 배경 지구 원 */
+    .header-globe {
+      position: absolute; right: -30px; top: -30px;
+      width: 120px; height: 120px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%,
+        rgba(30,136,229,0.25) 0%, rgba(39,174,96,0.12) 50%, transparent 70%);
+      border: 1px solid rgba(66,165,245,0.2);
+      animation: globeRotate 20s linear infinite;
+    }
+    .header-globe::before {
+      content: '';
+      position: absolute; inset: 8px; border-radius: 50%;
+      border: 1px solid rgba(66,165,245,0.12);
+    }
+    .header-globe::after {
+      content: '';
+      position: absolute; inset: 20px; border-radius: 50%;
+      border: 1px solid rgba(66,165,245,0.08);
+    }
+    @keyframes globeRotate {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    .logo-row { display: flex; align-items: center; gap: 12px; position: relative; z-index: 2; }
+
+    /* 유네스코 엠블럼 SVG */
+    .logo-emblem {
+      width: 52px; height: 52px; flex-shrink: 0;
+      filter: drop-shadow(0 0 12px rgba(249,168,37,0.5));
+    }
+
+    .logo-text-block { flex: 1; }
+    .logo-en {
+      font-family: 'Cinzel', serif; font-size: 0.72rem; font-weight: 600;
+      color: var(--gold); letter-spacing: 3px; text-transform: uppercase;
+      opacity: 0.9;
+    }
+    .logo-kr {
+      font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 700;
+      color: var(--white); line-height: 1.2;
+      text-shadow: 0 2px 12px rgba(66,165,245,0.4);
+    }
+    .logo-sub {
+      font-size: 0.65rem; color: var(--text-mid); margin-top: 3px; letter-spacing: 0.5px;
+    }
+
+    /* 카테고리 필터 탭 */
+    .cat-tabs {
+      display: flex; gap: 8px; margin-top: 14px; position: relative; z-index: 2;
+    }
+    .cat-tab {
+      flex: 1; padding: 8px 10px; border-radius: 12px; border: 1.5px solid;
+      font-family: 'Noto Sans KR', sans-serif; font-size: 0.75rem; font-weight: 500;
+      cursor: pointer; transition: all 0.25s; display: flex; align-items: center;
+      justify-content: center; gap: 5px; letter-spacing: 0.3px;
+    }
+    .cat-tab[data-cat="all"] {
+      border-color: rgba(66,165,245,0.4); color: var(--azure);
+      background: rgba(66,165,245,0.08);
+    }
+    .cat-tab[data-cat="all"].active,
+    .cat-tab[data-cat="all"]:hover {
+      background: rgba(66,165,245,0.2); border-color: var(--azure);
+      box-shadow: 0 0 16px var(--glow-blue);
+    }
+    .cat-tab[data-cat="culture"] {
+      border-color: rgba(230,126,34,0.4); color: var(--culture-color);
+      background: rgba(230,126,34,0.08);
+    }
+    .cat-tab[data-cat="culture"].active,
+    .cat-tab[data-cat="culture"]:hover {
+      background: rgba(230,126,34,0.2); border-color: var(--culture-color);
+      box-shadow: 0 0 16px rgba(230,126,34,0.3);
+    }
+    .cat-tab[data-cat="nature"] {
+      border-color: rgba(39,174,96,0.4); color: var(--nature-color);
+      background: rgba(39,174,96,0.08);
+    }
+    .cat-tab[data-cat="nature"].active,
+    .cat-tab[data-cat="nature"]:hover {
+      background: rgba(39,174,96,0.2); border-color: var(--nature-color);
+      box-shadow: 0 0 16px rgba(39,174,96,0.3);
+    }
+    .cat-tab.active { transform: translateY(-1px); }
+
+    /* ── 검색창 ── */
+    .search-area { padding: 14px 16px 8px; flex-shrink: 0; }
+
+    .search-wrapper {
+      display: flex; gap: 8px; align-items: center;
+      background: rgba(255,255,255,0.04);
+      border: 1.5px solid rgba(66,165,245,0.25);
+      border-radius: 14px; padding: 4px 4px 4px 14px;
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .search-wrapper:focus-within {
+      border-color: var(--azure);
+      box-shadow: 0 0 0 4px rgba(66,165,245,0.12), 0 0 24px var(--glow-blue);
+    }
+    .search-input {
+      flex: 1; background: transparent; border: none; outline: none;
+      font-family: 'Noto Sans KR', sans-serif; font-size: 0.9rem;
+      color: var(--white); padding: 8px 0;
+    }
+    .search-input::placeholder { color: rgba(144,202,249,0.45); }
+    .search-btn {
+      width: 40px; height: 40px; border-radius: 10px; border: none; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--horizon), var(--sky-blue));
+      color: white; font-size: 1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 14px var(--glow-blue);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .search-btn:hover { transform: scale(1.08); box-shadow: 0 6px 20px var(--glow-blue); }
+    .search-btn:active { transform: scale(0.94); }
+
+    /* 결과 헤더 */
+    .result-header {
+      padding: 6px 16px 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      min-height: 28px;
+    }
+    .result-info { font-size: 0.75rem; color: var(--text-mid); }
+    .result-info strong { color: var(--gold); }
+    .result-badge {
+      font-size: 0.68rem; padding: 2px 10px; border-radius: 20px;
+      background: var(--gold-dim); color: var(--gold-light);
+      border: 1px solid rgba(249,168,37,0.3);
+    }
+
+    /* ── 장소 리스트 ── */
+    #placeList { flex: 1; overflow-y: auto; padding: 4px 12px 8px; }
+    #placeList::-webkit-scrollbar { width: 4px; }
+    #placeList::-webkit-scrollbar-track { background: transparent; }
+    #placeList::-webkit-scrollbar-thumb { background: rgba(66,165,245,0.3); border-radius: 4px; }
+
+    /* 장소 카드 */
+    .place-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(66,165,245,0.12);
+      border-radius: 14px; padding: 12px 13px; margin-bottom: 7px;
+      cursor: pointer; transition: all 0.22s;
+      display: flex; gap: 11px; align-items: flex-start;
+      animation: cardSlide 0.35s ease both;
+      position: relative; overflow: hidden;
+    }
+    .place-card::before {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+      border-radius: 3px 0 0 3px; transition: opacity 0.2s;
+      opacity: 0;
+    }
+    .place-card.culture-card::before { background: var(--culture-color); }
+    .place-card.nature-card::before  { background: var(--nature-color); }
+    .place-card:hover { background: rgba(66,165,245,0.08); border-color: rgba(66,165,245,0.3); transform: translateX(3px); }
+    .place-card:hover::before { opacity: 1; }
+    .place-card.active {
+      background: rgba(66,165,245,0.1); border-color: rgba(66,165,245,0.4);
+      box-shadow: 0 4px 20px rgba(30,136,229,0.2);
+    }
+    .place-card.active::before { opacity: 1; }
+    @keyframes cardSlide {
+      from { opacity:0; transform:translateX(-12px); }
+      to   { opacity:1; transform:translateX(0); }
+    }
+
+    /* 유산 타입 뱃지 */
+    .heritage-badge {
+      padding: 3px 9px; border-radius: 20px; font-size: 0.62rem;
+      font-weight: 700; letter-spacing: 0.5px; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .heritage-badge.culture {
+      background: rgba(230,126,34,0.18); color: #f39c12;
+      border: 1px solid rgba(230,126,34,0.35);
+    }
+    .heritage-badge.nature {
+      background: rgba(39,174,96,0.18); color: #2ecc71;
+      border: 1px solid rgba(39,174,96,0.35);
+    }
+    .heritage-badge.mixed {
+      background: rgba(142,68,173,0.18); color: #bb8fce;
+      border: 1px solid rgba(142,68,173,0.35);
+    }
+
+    .card-index {
+      font-family: 'Cinzel', serif; font-size: 0.7rem; color: var(--text-dim);
+      min-width: 18px; text-align: center; margin-top: 3px;
+    }
+    .card-body { flex: 1; min-width: 0; }
+    .card-name { font-size: 0.88rem; color: var(--text-primary); font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+    .card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .card-country { font-size: 0.68rem; color: var(--text-mid); }
+    .card-save-btn {
+      margin-left: auto; width: 28px; height: 28px; border-radius: 8px; border: none; flex-shrink: 0;
+      background: rgba(255,255,255,0.05); color: var(--text-dim);
+      cursor: pointer; font-size: 0.95rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s; margin-top: 2px;
+    }
+    .card-save-btn:hover { background: var(--gold-dim); color: var(--gold); transform: scale(1.15); }
+    .card-save-btn.saved { background: var(--gold-dim); color: var(--gold); animation: saveFlash 0.4s ease; }
+    @keyframes saveFlash {
+      0%,100% { transform: scale(1); }
+      50%      { transform: scale(1.3); }
+    }
+
+    /* 빈 상태 */
+    .empty-state { text-align: center; padding: 48px 20px; color: var(--text-dim); }
+    .empty-icon { font-size: 3.2rem; margin-bottom: 14px; }
+    .empty-title { font-family: 'Cinzel', serif; font-size: 0.9rem; color: var(--text-mid); margin-bottom: 8px; }
+    .empty-desc { font-size: 0.8rem; line-height: 1.75; }
+
+    /* 유네스코 아닌 검색 결과 안내 */
+    .not-heritage-msg {
+      margin: 10px 0; padding: 14px 16px;
+      background: rgba(231,76,60,0.08);
+      border: 1px solid rgba(231,76,60,0.25); border-radius: 14px;
+      font-size: 0.82rem; color: #e88; line-height: 1.6; text-align: center;
+    }
+    .not-heritage-msg .not-icon { font-size: 1.8rem; display: block; margin-bottom: 6px; }
+
+    /* 페이지네이션 */
+    #pagination { padding: 8px 14px 14px; flex-shrink: 0;
+      display: flex; justify-content: center; gap: 5px; flex-wrap: wrap; }
+    .page-btn {
+      width: 30px; height: 30px; border-radius: 8px;
+      border: 1px solid rgba(66,165,245,0.2); background: transparent;
+      color: var(--text-mid); font-family: 'Cinzel', serif; font-size: 0.78rem;
+      cursor: pointer; transition: all 0.15s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .page-btn:hover { border-color: var(--azure); color: var(--azure); }
+    .page-btn.active { background: var(--horizon); border-color: var(--horizon); color: white; box-shadow: 0 2px 10px var(--glow-blue); }
+
+    /* ── 라이브러리 버튼 ── */
+    .library-btn-wrap { padding: 0 14px 14px; flex-shrink: 0; }
+    .library-btn {
+      width: 100%; padding: 11px; border-radius: 14px; border: 1.5px solid var(--gold);
+      background: var(--gold-dim); color: var(--gold-light);
+      font-family: 'Noto Sans KR', sans-serif; font-size: 0.85rem; font-weight: 500;
+      cursor: pointer; transition: all 0.22s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      box-shadow: 0 0 20px rgba(249,168,37,0.1);
+    }
+    .library-btn:hover { background: rgba(249,168,37,0.25); box-shadow: 0 4px 20px var(--glow-gold); transform: translateY(-1px); }
+    .library-count {
+      background: var(--gold); color: #1a0a00;
+      border-radius: 10px; padding: 1px 8px; font-size: 0.72rem; font-weight: 700;
+    }
+
+    /* ================================================================
+       지도 영역
+    ================================================================ */
+    #mapArea { flex: 1; position: relative; overflow: hidden; }
+    #map     { width: 100%; height: 100%; }
+
+    /* 지도 위 오버레이 UI */
+    .map-overlay-top {
+      position: absolute; top: 14px; left: 14px; right: 14px;
+      display: flex; gap: 10px; align-items: flex-start; z-index: 5; pointer-events: none;
+    }
+    .map-status-badge {
+      background: rgba(3,9,26,0.88); backdrop-filter: blur(12px);
+      border: 1px solid rgba(66,165,245,0.25); border-radius: 12px;
+      padding: 7px 14px; font-size: 0.74rem; color: var(--text-mid);
+      display: flex; align-items: center; gap: 6px; pointer-events: auto;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: #4caf50;
+      animation: dotPulse 1.5s ease infinite;
+    }
+    @keyframes dotPulse {
+      0%,100%{opacity:1;transform:scale(1);}
+      50%    {opacity:0.4;transform:scale(1.4);}
+    }
+
+    /* 지도 우측 범례 */
+    .map-legend {
+      position: absolute; bottom: 24px; right: 14px; z-index: 5;
+      background: rgba(3,9,26,0.88); backdrop-filter: blur(12px);
+      border: 1px solid rgba(66,165,245,0.2); border-radius: 14px;
+      padding: 12px 14px; min-width: 150px;
+    }
+    .legend-title {
+      font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 2px;
+      color: var(--gold); text-transform: uppercase; margin-bottom: 9px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.73rem; color: var(--text-mid); }
+    .legend-item:last-child { margin-bottom: 0; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ================================================================
+       로딩 오버레이
+    ================================================================ */
+    #loadingOverlay {
+      position: fixed; inset: 0; z-index: 9998;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(3,9,26,0.75); backdrop-filter: blur(12px);
+    }
+    #loadingOverlay.show { display: flex; animation: fadeIn 0.3s; }
+    @keyframes fadeIn { from{opacity:0;}to{opacity:1;} }
+
+    .loading-card {
+      background: linear-gradient(145deg, rgba(6,29,63,0.98), rgba(3,9,26,0.98));
+      border: 1px solid rgba(66,165,245,0.3); border-radius: 24px;
+      padding: 36px 48px; text-align: center; max-width: 380px; width: 90%;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 60px rgba(30,136,229,0.15);
+      animation: popIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275);
+      position: relative; overflow: hidden;
+    }
+    @keyframes popIn {
+      from{opacity:0;transform:scale(0.6) translateY(24px);}
+      to  {opacity:1;transform:scale(1)   translateY(0);}
+    }
+
+    /* 로딩 카드 배경 지구 */
+    .loading-globe-bg {
+      position: absolute; top: -40px; right: -40px;
+      width: 140px; height: 140px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%,
+        rgba(30,136,229,0.2) 0%, rgba(39,174,96,0.1) 60%, transparent 80%);
+      border: 1px solid rgba(66,165,245,0.15);
+      animation: globeRotate 6s linear infinite;
+    }
+
+    .loading-globe-icon { font-size: 3.5rem; margin-bottom: 14px; animation: globeSpin 3s ease infinite; display: block; }
+    @keyframes globeSpin {
+      0%,100%{transform:rotate(-8deg) scale(1);}
+      50%    {transform:rotate(8deg)  scale(1.1);}
+    }
+    .loading-title {
+      font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 3px;
+      color: var(--gold); text-transform: uppercase; margin-bottom: 10px; opacity: 0.9;
+    }
+    .loading-msg {
+      font-size: 1.05rem; color: var(--text-primary); line-height: 1.65;
+      margin-bottom: 22px; position: relative; z-index: 1;
+    }
+    .loading-msg em { color: var(--azure); font-style: normal; }
+
+    .orbit-dots { display: flex; justify-content: center; gap: 8px; }
+    .orbit-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      animation: orbitPulse 1s ease infinite;
+    }
+    .orbit-dot:nth-child(1){background:#42a5f5;animation-delay:0s;}
+    .orbit-dot:nth-child(2){background:#f9a825;animation-delay:0.15s;}
+    .orbit-dot:nth-child(3){background:#27ae60;animation-delay:0.3s;}
+    .orbit-dot:nth-child(4){background:#e67e22;animation-delay:0.45s;}
+    .orbit-dot:nth-child(5){background:#9b59b6;animation-delay:0.6s;}
+    @keyframes orbitPulse {
+      0%,100%{transform:scale(1);   opacity:0.4;}
+      50%    {transform:scale(1.8); opacity:1;}
+    }
+
+    /* ================================================================
+       장소 상세 모달
+    ================================================================ */
+    #placeModal {
+      position: fixed; inset: 0; z-index: 9999;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(3,9,26,0.75); backdrop-filter: blur(14px);
+      padding: 20px;
+    }
+    #placeModal.show { display: flex; animation: fadeIn 0.25s; }
+
+    .modal-card {
+      background: linear-gradient(145deg, rgba(6,29,63,0.98), rgba(3,9,26,0.98));
+      border-radius: 24px; max-width: 500px; width: 100%;
+      box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 60px rgba(30,136,229,0.12);
+      overflow: hidden;
+      animation: modalPop 0.4s cubic-bezier(0.175,0.885,0.32,1.275);
+      position: relative;
+      border: 1px solid rgba(66,165,245,0.2);
+    }
+    @keyframes modalPop {
+      from{opacity:0;transform:scale(0.72) translateY(28px);}
+      to  {opacity:1;transform:scale(1)    translateY(0);}
+    }
+
+    /* 모달 헤더 */
+    .modal-header {
+      padding: 24px 24px 18px; position: relative; overflow: hidden;
+    }
+    /* 유산 타입별 헤더 색 */
+    .modal-header.culture-header {
+      background: linear-gradient(135deg, rgba(160,64,0,0.6), rgba(3,9,26,0.9));
+      border-bottom: 1px solid rgba(230,126,34,0.25);
+    }
+    .modal-header.nature-header {
+      background: linear-gradient(135deg, rgba(20,90,50,0.6), rgba(3,9,26,0.9));
+      border-bottom: 1px solid rgba(39,174,96,0.25);
+    }
+    .modal-header.mixed-header {
+      background: linear-gradient(135deg, rgba(80,40,120,0.6), rgba(3,9,26,0.9));
+      border-bottom: 1px solid rgba(142,68,173,0.25);
+    }
+    /* 헤더 배경 장식 */
+    .modal-header::after {
+      content: '';
+      position: absolute; bottom: -40px; right: -40px;
+      width: 130px; height: 130px; border-radius: 50%;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .modal-type-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 12px; border-radius: 20px; font-size: 0.7rem;
+      font-weight: 700; letter-spacing: 0.8px; margin-bottom: 10px;
+      position: relative; z-index: 2;
+    }
+    .modal-type-badge.culture { background: rgba(230,126,34,0.22); color: #f5a623; border: 1px solid rgba(230,126,34,0.4); }
+    .modal-type-badge.nature  { background: rgba(39,174,96,0.22);  color: #2ecc71; border: 1px solid rgba(39,174,96,0.4); }
+    .modal-type-badge.mixed   { background: rgba(142,68,173,0.22); color: #bb8fce; border: 1px solid rgba(142,68,173,0.4); }
+
+    /* UNESCO 선언 문구 */
+    .modal-heritage-declare {
+      font-family: 'Cinzel', serif; font-size: 0.68rem; letter-spacing: 2px;
+      color: var(--gold); opacity: 0.85; margin-bottom: 6px; position: relative; z-index: 2;
+    }
+    .modal-name {
+      font-family: 'Playfair Display', serif; font-size: 1.35rem; font-weight: 700;
+      color: var(--white); line-height: 1.25; position: relative; z-index: 2;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+    .modal-close {
+      position: absolute; top: 16px; right: 16px; z-index: 5;
+      width: 30px; height: 30px; border-radius: 8px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+      color: var(--text-mid); font-size: 0.95rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .modal-close:hover { background: rgba(255,255,255,0.15); color: white; transform: rotate(90deg); }
+
+    /* 모달 바디 */
+    .modal-body { padding: 18px 22px 22px; }
+    .modal-row {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid rgba(66,165,245,0.08);
+    }
+    .modal-row:last-of-type { border-bottom: none; }
+    .modal-row-icon {
+      width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+      background: rgba(66,165,245,0.08); border: 1px solid rgba(66,165,245,0.15);
+      display: flex; align-items: center; justify-content: center; font-size: 1rem;
+    }
+    .modal-row-label { font-size: 0.65rem; color: var(--text-dim); margin-bottom: 3px; letter-spacing: 0.5px; text-transform: uppercase; }
+    .modal-row-value { font-size: 0.86rem; color: var(--text-primary); line-height: 1.45; }
+
+    /* 모달 액션 버튼들 */
+    .modal-actions { display: flex; gap: 9px; margin-top: 16px; }
+    .modal-action-btn {
+      flex: 1; padding: 11px 8px; border-radius: 12px; border: none; cursor: pointer;
+      font-family: 'Noto Sans KR', sans-serif; font-size: 0.82rem; font-weight: 500;
+      transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .modal-save-btn {
+      background: var(--gold-dim); color: var(--gold-light);
+      border: 1.5px solid rgba(249,168,37,0.35);
+    }
+    .modal-save-btn:hover { background: rgba(249,168,37,0.25); box-shadow: 0 4px 18px var(--glow-gold); }
+    .modal-save-btn.saved { background: rgba(249,168,37,0.3); color: var(--gold); }
+    .modal-map-btn {
+      background: rgba(66,165,245,0.1); color: var(--azure);
+      border: 1.5px solid rgba(66,165,245,0.25);
+    }
+    .modal-map-btn:hover { background: rgba(66,165,245,0.2); box-shadow: 0 4px 18px var(--glow-blue); }
+
+    #placeModal .modal-backdrop { position: absolute; inset: 0; z-index: -1; }
+
+    /* ================================================================
+       라이브러리 모달
+    ================================================================ */
+    #libraryModal {
+      position: fixed; inset: 0; z-index: 9999;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(3,9,26,0.8); backdrop-filter: blur(14px);
+      padding: 20px;
+    }
+    #libraryModal.show { display: flex; animation: fadeIn 0.25s; }
+
+    .library-card {
+      background: linear-gradient(145deg, rgba(6,29,63,0.98), rgba(3,9,26,0.98));
+      border: 1px solid rgba(249,168,37,0.25); border-radius: 24px;
+      max-width: 540px; width: 100%; max-height: 80vh;
+      box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 60px rgba(249,168,37,0.08);
+      overflow: hidden; display: flex; flex-direction: column;
+      animation: modalPop 0.4s cubic-bezier(0.175,0.885,0.32,1.275);
+    }
+
+    .library-header {
+      padding: 20px 22px 16px; flex-shrink: 0;
+      background: linear-gradient(135deg, rgba(160,120,0,0.3), rgba(3,9,26,0.8));
+      border-bottom: 1px solid rgba(249,168,37,0.2);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .library-header-icon { font-size: 2rem; }
+    .library-header-text h2 { font-family: 'Cinzel', serif; font-size: 1rem; color: var(--gold-light); }
+    .library-header-text p  { font-size: 0.72rem; color: var(--text-dim); margin-top: 2px; }
+    .library-close {
+      margin-left: auto; width: 30px; height: 30px; border-radius: 8px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text-mid); cursor: pointer; font-size: 0.95rem;
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .library-close:hover { background: rgba(255,255,255,0.12); color: white; transform: rotate(90deg); }
+
+    .library-body { flex: 1; overflow-y: auto; padding: 14px 18px 18px; }
+    .library-body::-webkit-scrollbar { width: 4px; }
+    .library-body::-webkit-scrollbar-thumb { background: rgba(249,168,37,0.3); border-radius: 4px; }
+
+    .library-empty { text-align: center; padding: 48px 20px; color: var(--text-dim); }
+    .library-empty .lib-icon { font-size: 3rem; margin-bottom: 12px; }
+    .library-empty p { font-size: 0.82rem; line-height: 1.7; color: var(--text-mid); }
+
+    /* 저장된 유산 아이템 */
+    .saved-item {
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(66,165,245,0.1);
+      border-radius: 12px; padding: 11px 13px; margin-bottom: 7px;
+      display: flex; align-items: center; gap: 10px;
+      animation: cardSlide 0.3s ease both;
+      transition: background 0.2s;
+    }
+    .saved-item:hover { background: rgba(66,165,245,0.06); }
+    .saved-item-type { font-size: 1.1rem; flex-shrink: 0; }
+    .saved-item-info { flex: 1; min-width: 0; }
+    .saved-item-name { font-size: 0.85rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .saved-item-sub  { font-size: 0.68rem; color: var(--text-dim); margin-top: 2px; }
+    .saved-item-remove {
+      width: 26px; height: 26px; border-radius: 7px; border: none;
+      background: rgba(231,76,60,0.08); color: rgba(231,76,60,0.6);
+      cursor: pointer; font-size: 0.8rem; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .saved-item-remove:hover { background: rgba(231,76,60,0.2); color: #e74c3c; }
+
+    /* 라이브러리 통계 */
+    .library-stats {
+      display: flex; gap: 8px; margin-bottom: 14px; padding-bottom: 14px;
+      border-bottom: 1px solid rgba(66,165,245,0.1);
+    }
+    .lib-stat {
+      flex: 1; text-align: center; padding: 10px 8px; border-radius: 10px;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(66,165,245,0.08);
+    }
+    .lib-stat-num { font-family: 'Cinzel', serif; font-size: 1.4rem; color: var(--gold); }
+    .lib-stat-label { font-size: 0.62rem; color: var(--text-dim); margin-top: 2px; }
+
+    /* ================================================================
+       반응형
+    ================================================================ */
+    @media (max-width:700px) {
+      #app { flex-direction: column; }
+      #sidebar { width:100%; height:52vh; min-width:unset; border-right:none; border-bottom:1px solid var(--panel-border); }
+      #mapArea { height:48vh; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- 배경 -->
+<div id="bgCanvas"></div>
+<div id="gridLines"></div>
+
+<!-- ================================================================
+     로딩 오버레이
+================================================================ -->
+<div id="loadingOverlay">
+  <div class="loading-card">
+    <div class="loading-globe-bg"></div>
+    <span class="loading-globe-icon">🌍</span>
+    <div class="loading-title">UNESCO World Heritage</div>
+    <div class="loading-msg">
+      세계의 유산을 탐색하는 중...<br/>
+      <em>잠시만 기다려주세요!</em>
+    </div>
+    <div class="orbit-dots">
+      <div class="orbit-dot"></div>
+      <div class="orbit-dot"></div>
+      <div class="orbit-dot"></div>
+      <div class="orbit-dot"></div>
+      <div class="orbit-dot"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     장소 상세 모달
+================================================================ -->
+<div id="placeModal">
+  <div class="modal-backdrop" id="modalBackdrop"></div>
+  <div class="modal-card">
+    <div class="modal-header" id="modalHeader">
+      <button class="modal-close" id="modalClose">✕</button>
+      <div class="modal-heritage-declare" id="modalDeclare">UNESCO WORLD HERITAGE SITE</div>
+      <div class="modal-type-badge" id="modalTypeBadge">🏛️ 문화유산</div>
+      <div class="modal-name" id="modalName">–</div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-row">
+        <div class="modal-row-icon">🗺️</div>
+        <div>
+          <div class="modal-row-label">도로명 주소</div>
+          <div class="modal-row-value" id="modalAddress">–</div>
+        </div>
+      </div>
+      <div class="modal-row" id="modalPhoneRow">
+        <div class="modal-row-icon">📞</div>
+        <div>
+          <div class="modal-row-label">연락처</div>
+          <div class="modal-row-value" id="modalPhone">–</div>
+        </div>
+      </div>
+      <div class="modal-row">
+        <div class="modal-row-icon">🏷️</div>
+        <div>
+          <div class="modal-row-label">카테고리</div>
+          <div class="modal-row-value" id="modalCategory">–</div>
+        </div>
+      </div>
+      <div class="modal-row" id="modalDistRow">
+        <div class="modal-row-icon">📏</div>
+        <div>
+          <div class="modal-row-label">현재 위치에서</div>
+          <div class="modal-row-value" id="modalDist">–</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-action-btn modal-save-btn" id="modalSaveBtn">🌐 내 라이브러리에 저장</button>
+        <button class="modal-action-btn modal-map-btn" id="modalMapBtn">🗺️ 지도에서 보기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     라이브러리 모달
+================================================================ -->
+<div id="libraryModal">
+  <div class="modal-backdrop" id="libraryBackdrop"></div>
+  <div class="library-card">
+    <div class="library-header">
+      <div class="library-header-icon">📚</div>
+      <div class="library-header-text">
+        <h2>나의 세계유산 라이브러리</h2>
+        <p>저장한 유네스코 유산 목록</p>
+      </div>
+      <button class="library-close" id="libraryClose">✕</button>
+    </div>
+    <div class="library-body">
+      <div class="library-stats" id="libraryStats"></div>
+      <div id="libraryList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     메인 앱
+================================================================ -->
+<div id="app">
+
+  <!-- 사이드바 -->
+  <div id="sidebar">
+    <!-- 헤더 -->
+    <div class="app-header">
+      <div class="header-globe"></div>
+      <div class="logo-row">
+        <!-- 유네스코 스타일 엠블럼 SVG -->
+        <svg class="logo-emblem" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+          <!-- 바깥 원 -->
+          <circle cx="40" cy="40" r="36" fill="none" stroke="#f9a825" stroke-width="2" opacity="0.8"/>
+          <!-- 지구 (대륙 느낌) -->
+          <circle cx="40" cy="40" r="24" fill="none" stroke="#f9a825" stroke-width="1.5" opacity="0.6"/>
+          <!-- 위도선 -->
+          <ellipse cx="40" cy="40" rx="24" ry="10" fill="none" stroke="#f9a825" stroke-width="0.8" opacity="0.4"/>
+          <ellipse cx="40" cy="32" rx="20" ry="7" fill="none" stroke="#f9a825" stroke-width="0.8" opacity="0.3"/>
+          <ellipse cx="40" cy="48" rx="20" ry="7" fill="none" stroke="#f9a825" stroke-width="0.8" opacity="0.3"/>
+          <!-- 경도선 -->
+          <line x1="40" y1="16" x2="40" y2="64" stroke="#f9a825" stroke-width="0.8" opacity="0.4"/>
+          <line x1="20" y1="28" x2="60" y2="52" stroke="#f9a825" stroke-width="0.8" opacity="0.3"/>
+          <line x1="20" y1="52" x2="60" y2="28" stroke="#f9a825" stroke-width="0.8" opacity="0.3"/>
+          <!-- 중심 별 -->
+          <polygon points="40,34 42,39 47,39 43,42 44,47 40,44 36,47 37,42 33,39 38,39"
+            fill="#f9a825" opacity="0.9"/>
+          <!-- 바깥 작은 별들 -->
+          <circle cx="40" cy="8"  r="2" fill="#f9a825" opacity="0.7"/>
+          <circle cx="68" cy="28" r="1.5" fill="#f9a825" opacity="0.6"/>
+          <circle cx="68" cy="52" r="1.5" fill="#f9a825" opacity="0.6"/>
+          <circle cx="40" cy="72" r="2" fill="#f9a825" opacity="0.7"/>
+          <circle cx="12" cy="52" r="1.5" fill="#f9a825" opacity="0.6"/>
+          <circle cx="12" cy="28" r="1.5" fill="#f9a825" opacity="0.6"/>
+        </svg>
+
+        <div class="logo-text-block">
+          <div class="logo-en">UNESCO</div>
+          <div class="logo-kr">세계유산 지도</div>
+          <div class="logo-sub">World Heritage Explorer</div>
+        </div>
+      </div>
+
+      <!-- 카테고리 탭 -->
+      <div class="cat-tabs">
+        <button class="cat-tab active" data-cat="all">🌐 전체</button>
+        <button class="cat-tab" data-cat="culture">🏛️ 문화유산</button>
+        <button class="cat-tab" data-cat="nature">🌿 자연유산</button>
+      </div>
+    </div>
+
+    <!-- 검색창 -->
+    <div class="search-area">
+      <div class="search-wrapper">
+        <input type="text" id="searchInput" class="search-input"
+               placeholder="유네스코 유산 이름을 입력하세요..." autocomplete="off"/>
+        <button class="search-btn" id="searchBtn">🔍</button>
+      </div>
+    </div>
+
+    <!-- 결과 헤더 -->
+    <div class="result-header">
+      <div class="result-info" id="resultInfo"></div>
+      <div class="result-badge" id="resultBadge" style="display:none"></div>
+    </div>
+
+    <!-- 장소 리스트 -->
+    <div id="placeList">
+      <div class="empty-state">
+        <div class="empty-icon">🌍</div>
+        <div class="empty-title">Heritage Explorer</div>
+        <div class="empty-desc">
+          유네스코 세계유산의 이름을<br/>검색하여 탐험을 시작하세요.<br/><br/>
+          <span style="color:var(--culture-color)">🏛️ 문화유산</span> · <span style="color:var(--nature-color)">🌿 자연유산</span><br/>
+          을 카테고리로 구분할 수 있어요.
+        </div>
+      </div>
+    </div>
+
+    <!-- 페이지네이션 -->
+    <div id="pagination"></div>
+
+    <!-- 라이브러리 버튼 -->
+    <div class="library-btn-wrap">
+      <button class="library-btn" id="libraryOpenBtn">
+        📚 나의 세계유산 라이브러리
+        <span class="library-count" id="libraryCount">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 지도 -->
+  <div id="mapArea">
+    <div id="map"></div>
+    <div class="map-overlay-top">
+      <div class="map-status-badge">
+        <div class="status-dot"></div>
+        <span id="mapStatusText">위치 확인 중...</span>
+      </div>
+    </div>
+    <!-- 범례 -->
+    <div class="map-legend">
+      <div class="legend-title">Legend</div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--culture-color)"></div>
+        문화유산 (Cultural)
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--nature-color)"></div>
+        자연유산 (Natural)
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#9b59b6"></div>
+        복합유산 (Mixed)
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#e74c3c;width:12px;height:12px;border-radius:3px;"></div>
+        현재 위치
+      </div>
+    </div>
+  </div>
+
+</div><!-- /#app -->
+
+<script>
+// ================================================================
+// 유네스코 세계유산 키워드 DB
+// 장소명에 해당 키워드가 포함되면 유산으로 판별
+// ================================================================
+const HERITAGE_DB = {
+  culture: [
+    // 한국
+    '경복궁','창덕궁','종묘','수원화성','화성','석굴암','불국사','해인사','고창','화순','강화','고인돌',
+    '경주역사유적','조선왕릉','하회','양동','마을','남한산성','백제역사유적','서울','서원',
+    // 중국
+    '만리장성','자금성','천안문','진시황릉','병마용','소림사','황산','황룡','구채구','리장',
+    '평요','수코타이','앙코르','보로부두르','타지마할','아그라','붉은요새','아잔타','엘로라',
+    // 유럽
+    '콜로세움','바티칸','파르테논','아크로폴리스','폼페이','베르사유','루브르','노트르담','에펠','빈','잘츠부르크',
+    '프라하','부다페스트','두브로브니크','베네치아','피렌체','로마','아테네','크라쿠프','뉘른베르크',
+    '쾰른','아헨','슈파이어','마인츠','브뤼셀','안트베르펀','암스테르담','에든버러','바스','스톤헨지',
+    // 중동/아프리카/중남미
+    '페트라','제라시','팔미라','카르낙','룩소르','카이로','피라미드','스핑크스','마추픽추','치첸이사',
+    '테오티우아칸','멕시코시티','쿠스코','나스카','카르타헤나','살바도르','잉카','아즈텍','마야',
+    // 기타 아시아
+    '앙코르와트','캄보디아','보로부두르','인도네시아','하롱베이','호이안','미선','아유타야','방콕','수코타이',
+    '바간','파간','미얀마','샹그릴라','티베트','포탈라궁','둔황','막고굴','실크로드',
+    '네팔','카트만두','파슈파티나트','부탄','탁상','일본','닛코','교토','나라','히메지','오키나와','시라카와',
+  ],
+  nature: [
+    // 한국
+    '제주도','제주','한라산','성산일출봉','거문오름','성산','우도','마라도',
+    // 아시아태평양
+    '갈라파고스','킬리만자로','세렝게티','마사이마라','그레이트배리어리프','카카두',
+    '우루루','아이어스록','블루마운틴','피오르드랜드','밀퍼드사운드','하롱','퐁냐','케반',
+    // 아메리카
+    '옐로스톤','그랜드캐니언','요세미티','에버글레이즈','아마존','이과수','파타고니아','토레스델파이네',
+    '갈라파고스','코스타리카','벨리즈','바하칼리포르니아',
+    // 유럽/아프리카
+    '도로미티','스위스알프스','노르웨이피오르드','아이슬란드','카마르그','카미노','카나리아',
+    '마다가스카르','콩고','빅토리아폭포','빅토리아','오카방고','남극',
+    // 기타
+    '코모도','수마트라','보르네오','말레이시아','아마존','브라질','티카르','바로스','로라이마',
+    '에티오피아','시미엔','뱅갈라','순다르반스','인더스','인더스강',
+  ],
+};
+
+// 유산 유형 판별 함수
+function detectHeritageType(placeName, categoryName) {
+  const name = (placeName + ' ' + (categoryName || '')).toLowerCase();
+
+  let cultureScore = 0;
+  let natureScore  = 0;
+
+  HERITAGE_DB.culture.forEach(kw => {
+    if (name.includes(kw.toLowerCase())) cultureScore++;
+  });
+  HERITAGE_DB.nature.forEach(kw => {
+    if (name.includes(kw.toLowerCase())) natureScore++;
+  });
+
+  // 카카오 카테고리에서도 힌트 추출
+  if (categoryName) {
+    const cat = categoryName.toLowerCase();
+    if (cat.includes('관광') || cat.includes('문화') || cat.includes('역사') ||
+        cat.includes('궁') || cat.includes('사원') || cat.includes('성') ||
+        cat.includes('박물관') || cat.includes('유적')) cultureScore += 2;
+    if (cat.includes('자연') || cat.includes('공원') || cat.includes('산') ||
+        cat.includes('해변') || cat.includes('섬') || cat.includes('생태') ||
+        cat.includes('국립') || cat.includes('숲')) natureScore += 2;
+  }
+
+  if (cultureScore === 0 && natureScore === 0) return null; // 유네스코 아님
+  if (cultureScore > 0 && natureScore > 0) return 'mixed';
+  if (cultureScore >= natureScore) return 'culture';
+  return 'nature';
+}
+
+// ================================================================
+// 전역 상태
+// ================================================================
+let map;
+let ps;
+let infowindow;
+let currentMarkers   = [];
+let currentPlaces    = [];      // 현재 검색 결과 장소 배열
+let currentFilter    = 'all';   // 현재 카테고리 필터
+let library          = [];      // 저장된 유산 목록
+let currentModalPlace = null;   // 현재 모달에 표시 중인 장소
+
+// ================================================================
+// 배경 별 생성
+// ================================================================
+function createStars() {
+  for (let i = 0; i < 80; i++) {
+    const s    = document.createElement('div');
+    s.className = 'star';
+    const size = 1 + Math.random() * 2.5;
+    s.style.cssText = `
+      width:${size}px; height:${size}px;
+      left:${Math.random()*100}%; top:${Math.random()*100}%;
+      animation-duration:${2 + Math.random()*4}s;
+      animation-delay:-${Math.random()*5}s;`;
+    document.body.appendChild(s);
+  }
+}
+
+// ================================================================
+// 배경 격자선 (지구의 위/경도선 느낌)
+// ================================================================
+function createGridLines() {
+  const container = document.getElementById('gridLines');
+  const sizes = [300, 500, 700, 900, 1100, 1400, 1800];
+  sizes.forEach((s, i) => {
+    const el = document.createElement('div');
+    el.className = 'grid-circle';
+    el.style.cssText = `width:${s}px;height:${s}px;animation-delay:${i*1.2}s;`;
+    container.appendChild(el);
+  });
+}
+
+// ================================================================
+// 로딩 표시/숨김
+// ================================================================
+function showLoading() { document.getElementById('loadingOverlay').classList.add('show'); }
+function hideLoading() { document.getElementById('loadingOverlay').classList.remove('show'); }
+
+// ================================================================
+// 카카오맵 초기화
+// ================================================================
+function initMap() {
+  map = new kakao.maps.Map(document.getElementById('map'), {
+    center: new kakao.maps.LatLng(37.5665, 126.9780),
+    level:  5,
+  });
+  ps         = new kakao.maps.services.Places();
+  infowindow = new kakao.maps.InfoWindow({ zIndex: 1 });
+  requestLocation();
+}
+
+// ================================================================
+// 현재 위치 요청
+// ================================================================
+function requestLocation() {
+  const el = document.getElementById('mapStatusText');
+  if (!navigator.geolocation) { el.textContent = '위치 기능 미지원'; return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const ll = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+      map.setCenter(ll); map.setLevel(5);
+      addMyMarker(ll);
+      el.textContent = '📍 현재 위치 기준 탐색 중';
+    },
+    () => { el.textContent = '🌍 전 세계 유산 탐색 모드'; },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+  );
+}
+
+// ================================================================
+// 내 위치 마커
+// ================================================================
+function addMyMarker(pos) {
+  new kakao.maps.CustomOverlay({
+    position: pos, yAnchor: 1.1,
+    content: `
+      <div style="display:flex;flex-direction:column;align-items:center;font-family:'Noto Sans KR',sans-serif;">
+        <div style="background:linear-gradient(135deg,#e74c3c,#c0392b);color:white;
+          border-radius:10px 10px 10px 0;padding:5px 10px;font-size:11px;white-space:nowrap;
+          box-shadow:0 4px 14px rgba(231,76,60,0.5);border:2px solid rgba(255,255,255,0.2);
+          margin-bottom:3px;letter-spacing:0.3px;">📍 현재 위치</div>
+        <div style="width:12px;height:12px;background:#e74c3c;border-radius:50%;
+          border:2.5px solid white;box-shadow:0 2px 8px rgba(231,76,60,0.5);"></div>
+      </div>`
+  }).setMap(map);
+}
+
+// ================================================================
+// 마커 초기화
+// ================================================================
+function clearMarkers() {
+  currentMarkers.forEach(m => m.setMap(null));
+  currentMarkers = [];
+  infowindow.close();
+}
+
+// ================================================================
+// 유산 타입별 마커 색 결정
+// ================================================================
+function getTypeColor(type) {
+  if (type === 'culture') return { bg: '#e67e22', dark: '#a04000', glow: 'rgba(230,126,34,0.45)' };
+  if (type === 'nature')  return { bg: '#27ae60', dark: '#145a32', glow: 'rgba(39,174,96,0.45)' };
+  if (type === 'mixed')   return { bg: '#9b59b6', dark: '#6c3483', glow: 'rgba(155,89,182,0.45)' };
+  return { bg: '#42a5f5', dark: '#1565c0', glow: 'rgba(66,165,245,0.45)' };
+}
+
+// ================================================================
+// 검색 마커 추가
+// ================================================================
+function addSearchMarker(place, idx, type) {
+  const pos   = new kakao.maps.LatLng(place.y, place.x);
+  const color = getTypeColor(type);
+  const label = type === 'culture' ? '🏛️' : type === 'nature' ? '🌿' : type === 'mixed' ? '🌐' : '📍';
+
+  const ov = new kakao.maps.CustomOverlay({
+    position: pos, yAnchor: 1.05, zIndex: 3,
+    content: `
+      <div style="display:flex;flex-direction:column;align-items:flex-start;font-family:'Noto Sans KR',sans-serif;">
+        <div style="background:linear-gradient(135deg,${color.bg},${color.dark});color:white;
+          border-radius:10px 10px 10px 0;padding:4px 9px;font-size:11px;white-space:nowrap;
+          box-shadow:0 3px 12px ${color.glow};border:1.5px solid rgba(255,255,255,0.2);
+          max-width:140px;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;letter-spacing:0.2px;">
+          ${label} <strong>${idx+1}</strong> ${place.place_name}</div>
+        <div style="width:10px;height:10px;background:${color.bg};border-radius:50%;
+          border:2px solid rgba(255,255,255,0.5);box-shadow:0 2px 8px ${color.glow};margin-left:8px;"></div>
+      </div>`
+  });
+  ov.setMap(map);
+  currentMarkers.push(ov);
+  return ov;
+}
+
+// ================================================================
+// 유산 타입 라벨 반환
+// ================================================================
+function getTypeLabel(type) {
+  if (type === 'culture') return { icon: '🏛️', label: '문화유산', cls: 'culture' };
+  if (type === 'nature')  return { icon: '🌿', label: '자연유산', cls: 'nature' };
+  if (type === 'mixed')   return { icon: '🌐', label: '복합유산', cls: 'mixed' };
+  return { icon: '📍', label: '장소', cls: '' };
+}
+
+// ================================================================
+// 장소 상세 모달 열기
+// ================================================================
+function openPlaceModal(place, type) {
+  currentModalPlace = place;
+
+  const tl = getTypeLabel(type);
+
+  // 헤더 유산 타입 뱃지
+  const badge = document.getElementById('modalTypeBadge');
+  badge.textContent = `${tl.icon} ${tl.label}`;
+  badge.className   = `modal-type-badge ${tl.cls}`;
+
+  // 헤더 클래스
+  const header = document.getElementById('modalHeader');
+  header.className = `modal-header ${tl.cls}-header`;
+
+  // UNESCO 선언 문구 — 유산 타입에 따라 달리 표시
+  const declare = document.getElementById('modalDeclare');
+  if (type === 'culture') declare.textContent = '이것은... 🏛️ 문화유산 (Cultural Heritage)';
+  else if (type === 'nature') declare.textContent = '이것은... 🌿 자연유산 (Natural Heritage)';
+  else if (type === 'mixed') declare.textContent = '이것은... 🌐 복합유산 (Mixed Heritage)';
+  else declare.textContent = 'UNESCO WORLD HERITAGE SITE';
+
+  document.getElementById('modalName').textContent = place.place_name;
+  document.getElementById('modalAddress').textContent =
+    place.road_address_name || place.address_name || '주소 정보 없음';
+  document.getElementById('modalCategory').textContent =
+    place.category_name || '정보 없음';
+
+  // 전화번호
+  const phoneRow = document.getElementById('modalPhoneRow');
+  if (place.phone) {
+    document.getElementById('modalPhone').textContent = place.phone;
+    phoneRow.style.display = 'flex';
+  } else {
+    phoneRow.style.display = 'none';
+  }
+
+  // 거리
+  const distRow = document.getElementById('modalDistRow');
+  if (place.distance) {
+    document.getElementById('modalDist').textContent =
+      `약 ${Number(place.distance).toLocaleString()}m`;
+    distRow.style.display = 'flex';
+  } else {
+    distRow.style.display = 'none';
+  }
+
+  // 저장 버튼 상태 초기화
+  updateModalSaveBtn(place.id);
+
+  // 카카오맵 링크
+  document.getElementById('modalMapBtn').onclick = () =>
+    window.open(place.place_url, '_blank');
+
+  document.getElementById('placeModal').classList.add('show');
+}
+
+// ================================================================
+// 모달 저장 버튼 상태 업데이트
+// ================================================================
+function updateModalSaveBtn(placeId) {
+  const btn    = document.getElementById('modalSaveBtn');
+  const isSaved = library.some(item => item.id === placeId);
+  if (isSaved) {
+    btn.textContent = '✅ 저장됨';
+    btn.classList.add('saved');
+  } else {
+    btn.innerHTML = '🌐 내 라이브러리에 저장';
+    btn.classList.remove('saved');
+  }
+}
+
+function closePlaceModal() { document.getElementById('placeModal').classList.remove('show'); }
+
+// ================================================================
+// 라이브러리 관리
+// ================================================================
+function toggleLibrarySave(place, type) {
+  const idx = library.findIndex(item => item.id === place.id);
+  if (idx >= 0) {
+    // 이미 저장됨 → 제거
+    library.splice(idx, 1);
+  } else {
+    // 저장
+    library.push({
+      id:       place.id,
+      name:     place.place_name,
+      address:  place.road_address_name || place.address_name || '',
+      url:      place.place_url,
+      type:     type,
+      savedAt:  new Date().toLocaleDateString('ko-KR'),
+    });
+  }
+  updateLibraryCount();
+  return library.some(item => item.id === place.id);
+}
+
+function updateLibraryCount() {
+  document.getElementById('libraryCount').textContent = library.length;
+}
+
+// ================================================================
+// 라이브러리 모달 렌더링
+// ================================================================
+function renderLibrary() {
+  const listEl  = document.getElementById('libraryList');
+  const statsEl = document.getElementById('libraryStats');
+  listEl.innerHTML = '';
+
+  // 통계
+  const cultureCount = library.filter(i => i.type === 'culture').length;
+  const natureCount  = library.filter(i => i.type === 'nature').length;
+  const mixedCount   = library.filter(i => i.type === 'mixed').length;
+  statsEl.innerHTML = `
+    <div class="lib-stat"><div class="lib-stat-num">${library.length}</div><div class="lib-stat-label">전체</div></div>
+    <div class="lib-stat"><div class="lib-stat-num" style="color:var(--culture-color)">${cultureCount}</div><div class="lib-stat-label">문화유산</div></div>
+    <div class="lib-stat"><div class="lib-stat-num" style="color:var(--nature-color)">${natureCount}</div><div class="lib-stat-label">자연유산</div></div>
+    <div class="lib-stat"><div class="lib-stat-num" style="color:#9b59b6">${mixedCount}</div><div class="lib-stat-label">복합유산</div></div>
+  `;
+
+  if (library.length === 0) {
+    listEl.innerHTML = `
+      <div class="library-empty">
+        <div class="lib-icon">🌍</div>
+        <p>아직 저장된 유산이 없어요.<br/>검색 결과에서 🌐 버튼을 눌러<br/>세계유산을 저장해보세요!</p>
+      </div>`;
+    return;
+  }
+
+  library.forEach((item, i) => {
+    const tl   = getTypeLabel(item.type);
+    const el   = document.createElement('div');
+    el.className = 'saved-item';
+    el.style.animationDelay = `${i * 0.05}s`;
+    el.innerHTML = `
+      <div class="saved-item-type">${tl.icon}</div>
+      <div class="saved-item-info">
+        <div class="saved-item-name">${item.name}</div>
+        <div class="saved-item-sub">${tl.label} · ${item.savedAt}</div>
+      </div>
+      <button class="saved-item-remove" data-id="${item.id}" title="삭제">✕</button>
+    `;
+    // 삭제 버튼
+    el.querySelector('.saved-item-remove').addEventListener('click', (e) => {
+      const id  = e.currentTarget.dataset.id;
+      const idx = library.findIndex(l => l.id === id);
+      if (idx >= 0) library.splice(idx, 1);
+      updateLibraryCount();
+      renderLibrary();
+    });
+    listEl.appendChild(el);
+  });
+}
+
+// ================================================================
+// 장소 리스트 렌더링
+// ================================================================
+function renderPlaceList(places, isHeritageMixed) {
+  const listEl  = document.getElementById('placeList');
+  const infoEl  = document.getElementById('resultInfo');
+  const badgeEl = document.getElementById('resultBadge');
+  listEl.innerHTML = '';
+
+  if (!places || places.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🔭</div>
+        <div class="empty-title">결과 없음</div>
+        <div class="empty-desc">검색 결과가 없어요.<br/>다른 키워드로 시도해보세요.</div>
+      </div>`;
+    infoEl.innerHTML = ''; badgeEl.style.display = 'none';
+    return;
+  }
+
+  // 유산 필터링
+  const heritageItems = places.map(p => ({
+    place: p,
+    type:  detectHeritageType(p.place_name, p.category_name),
+  })).filter(item => {
+    if (item.type === null) return false; // 유네스코 아닌 것 제외
+    if (currentFilter === 'culture') return item.type === 'culture' || item.type === 'mixed';
+    if (currentFilter === 'nature')  return item.type === 'nature'  || item.type === 'mixed';
+    return true;
+  });
+
+  // 유네스코 아닌 결과가 있을 때 안내 메시지
+  const nonHeritageCount = places.length - places.filter(p => detectHeritageType(p.place_name, p.category_name) !== null).length;
+
+  if (places.length > 0 && heritageItems.length === 0) {
+    // 전부 유네스코 유산 아님
+    listEl.innerHTML = `
+      <div class="not-heritage-msg">
+        <span class="not-icon">🌏</span>
+        ㅠㅠ 여기에는 등재된 유산이 없어요!<br/>
+        앞으로 더 많은 유네스코 유산이<br/>
+        생기도록 노력해봐요!
+      </div>`;
+    infoEl.innerHTML = ''; badgeEl.style.display = 'none';
+    return;
+  }
+
+  infoEl.innerHTML = `<strong>${heritageItems.length}개</strong> 유산 발견`;
+  badgeEl.textContent = currentFilter === 'all' ? '전체' :
+    currentFilter === 'culture' ? '🏛️ 문화' : '🌿 자연';
+  badgeEl.style.display = 'inline';
+
+  heritageItems.forEach(({ place, type }, i) => {
+    const card   = document.createElement('div');
+    const tl     = getTypeLabel(type);
+    card.className = `place-card ${type ? type + '-card' : ''}`;
+    card.style.animationDelay = `${i * 0.055}s`;
+
+    const isSaved = library.some(l => l.id === place.id);
+
+    card.innerHTML = `
+      <div class="card-index">${i+1}</div>
+      <div class="card-body">
+        <div class="card-name">${place.place_name}</div>
+        <div class="card-meta">
+          <span class="heritage-badge ${tl.cls}">${tl.icon} ${tl.label}</span>
+          <span class="card-country">${place.road_address_name || place.address_name || ''}</span>
+        </div>
+      </div>
+      <button class="card-save-btn ${isSaved ? 'saved' : ''}" data-idx="${i}" title="${isSaved ? '저장됨' : '라이브러리에 저장'}">
+        ${isSaved ? '✅' : '🌐'}
+      </button>
+    `;
+
+    // 카드 클릭 → 지도 이동 + 모달
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.card-save-btn')) return; // 저장 버튼 클릭 시 무시
+      document.querySelectorAll('.place-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      const pos = new kakao.maps.LatLng(place.y, place.x);
+      map.setCenter(pos); map.setLevel(3);
+      openPlaceModal(place, type);
+    });
+
+    // 저장 버튼 클릭
+    const saveBtn = card.querySelector('.card-save-btn');
+    saveBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const nowSaved = toggleLibrarySave(place, type);
+      saveBtn.textContent = nowSaved ? '✅' : '🌐';
+      saveBtn.classList.toggle('saved', nowSaved);
+      // 모달이 열려있으면 모달 버튼도 업데이트
+      if (document.getElementById('placeModal').classList.contains('show')) {
+        updateModalSaveBtn(place.id);
+      }
+    });
+
+    listEl.appendChild(card);
+    addSearchMarker(place, i, type);
+  });
+}
+
+// ================================================================
+// 페이지네이션
+// ================================================================
+function renderPagination(pagination) {
+  const el = document.getElementById('pagination');
+  el.innerHTML = '';
+  if (!pagination || pagination.last <= 1) return;
+  for (let i = 1; i <= pagination.last; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'page-btn' + (i === pagination.current ? ' active' : '');
+    btn.textContent = i;
+    btn.addEventListener('click', () => pagination.gotoPage(i));
+    el.appendChild(btn);
+  }
+}
+
+// ================================================================
+// 장소 검색 실행
+// ================================================================
+function searchPlaces(keyword) {
+  if (!keyword.trim()) { alert('유네스코 유산 이름을 입력해주세요!'); return; }
+
+  showLoading();
+  setTimeout(hideLoading, 2000);
+  clearMarkers();
+
+  ps.keywordSearch(keyword.trim(), (data, status, pagination) => {
+    if (status === kakao.maps.services.Status.OK) {
+      currentPlaces = data;
+      renderPlaceList(data, false);
+      renderPagination(pagination);
+
+      // 지도 범위 조정
+      const bounds = new kakao.maps.LatLngBounds();
+      data.forEach(p => bounds.extend(new kakao.maps.LatLng(p.y, p.x)));
+      map.setBounds(bounds);
+    } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
+      currentPlaces = [];
+      document.getElementById('placeList').innerHTML = `
+        <div class="not-heritage-msg">
+          <span class="not-icon">🌏</span>
+          ㅠㅠ 여기에는 등재된 유산이 없어요!<br/>
+          앞으로 더 많은 유네스코 유산이<br/>
+          생기도록 노력해봐요!
+        </div>`;
+      document.getElementById('resultInfo').innerHTML = '';
+      document.getElementById('resultBadge').style.display = 'none';
+      renderPagination(null);
+    } else {
+      hideLoading();
+      alert('검색 중 오류가 발생했어요. 다시 시도해주세요.');
+    }
+  });
+}
+
+// ================================================================
+// 이벤트 바인딩
+// ================================================================
+function bindEvents() {
+  // 검색
+  document.getElementById('searchBtn').addEventListener('click', () =>
+    searchPlaces(document.getElementById('searchInput').value));
+  document.getElementById('searchInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') searchPlaces(document.getElementById('searchInput').value);
+  });
+
+  // 카테고리 탭
+  document.querySelectorAll('.cat-tab').forEach(btn =>
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.cat;
+      // 필터 변경 시 현재 결과 재렌더링
+      if (currentPlaces.length > 0) {
+        clearMarkers();
+        renderPlaceList(currentPlaces, false);
+      }
+    })
+  );
+
+  // 장소 모달 닫기
+  document.getElementById('modalClose').addEventListener('click', closePlaceModal);
+  document.getElementById('modalBackdrop').addEventListener('click', closePlaceModal);
+
+  // 모달 저장 버튼
+  document.getElementById('modalSaveBtn').addEventListener('click', () => {
+    if (!currentModalPlace) return;
+    const type = detectHeritageType(currentModalPlace.place_name, currentModalPlace.category_name);
+    toggleLibrarySave(currentModalPlace, type);
+    updateModalSaveBtn(currentModalPlace.id);
+    // 카드 버튼도 업데이트
+    document.querySelectorAll('.card-save-btn').forEach(btn => {
+      const idx  = parseInt(btn.dataset.idx);
+      const item = currentPlaces[idx];
+      if (item && item.id === currentModalPlace.id) {
+        const nowSaved = library.some(l => l.id === item.id);
+        btn.textContent = nowSaved ? '✅' : '🌐';
+        btn.classList.toggle('saved', nowSaved);
+      }
+    });
+  });
+
+  // 라이브러리 버튼
+  document.getElementById('libraryOpenBtn').addEventListener('click', () => {
+    renderLibrary();
+    document.getElementById('libraryModal').classList.add('show');
+  });
+  document.getElementById('libraryClose').addEventListener('click', () =>
+    document.getElementById('libraryModal').classList.remove('show'));
+  document.getElementById('libraryBackdrop').addEventListener('click', () =>
+    document.getElementById('libraryModal').classList.remove('show'));
+}
+
+// ================================================================
+// 앱 초기화
+// ================================================================
+function initApp() {
+  createStars();
+  createGridLines();
+  initMap();
+  bindEvents();
+}
+
+window.addEventListener('load', initApp);
+</script>
+</body>
+</html>
